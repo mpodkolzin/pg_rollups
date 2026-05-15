@@ -1,0 +1,27 @@
+# rollups extension control file
+# This file tells PostgreSQL about our extension's metadata
+
+# comment: Human-readable description shown in \dx+
+comment = 'Continuous rollup aggregations for time-series data'
+
+# default_version: Initial version to install
+default_version = '1.0'
+
+# relocatable: Can the extension be moved to a different schema?
+# false = extension objects stay in the schema specified at CREATE EXTENSION time
+relocatable = false
+
+# schema: Force installation into a specific schema
+# We use 'rollups' to keep our objects separate from user data
+schema = rollups
+
+# module_pathname: Path to the shared library file
+# IMPORTANT DISCOVERY: PostgreSQL does NOT automatically add .so extension
+# when using absolute paths, but DOES when using $libdir variable!
+# - Absolute path: Must include .so → '/path/to/rollups.so'
+# - $libdir path: Don't include .so → '$libdir/rollups' (PostgreSQL adds it)
+module_pathname = '/Users/maxim.podkolzin/pgdev/postgres/lib/rollups.so'
+
+# requires: List of extensions this one depends on (comma-separated)
+# We don't need any other extensions yet, but this is how you'd specify them:
+# requires = 'pg_stat_statements, btree_gist'

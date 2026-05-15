@@ -1,0 +1,31 @@
+# LLDB initialization for rollups extension debugging
+# This file is loaded automatically when LLDB starts in this directory
+
+# Load PostgreSQL type formatters
+command script import scripts/lldb_postgres_formatters.py
+
+# Common breakpoints (commented out by default)
+# Uncomment these to automatically set breakpoints when attaching
+# breakpoint set --name rollups_version
+# breakpoint set --name rollups_time_bucket
+
+# Display settings for better debugging experience
+settings set stop-disassembly-display never
+settings set stop-line-count-after 5
+settings set stop-line-count-before 5
+
+# Aliases for convenience
+command alias blist breakpoint list
+command alias bdel breakpoint delete
+command alias vars frame variable
+
+echo \n
+echo =====================================================
+echo Rollups Extension Debugging Environment Loaded
+echo =====================================================
+echo Common commands:
+echo   print mytext          - Now shows text content automatically!
+echo   print mytimestamp     - Shows formatted timestamp
+echo   blist                 - List breakpoints
+echo   vars                  - Show all local variables
+echo \n

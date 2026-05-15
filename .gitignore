@@ -1,0 +1,40 @@
+# Build artifacts
+*.o
+*.so
+*.bc
+*.a
+
+# PostgreSQL extension files
+*.sql
+rollups--*.sql
+!sql/rollups--*.sql
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test artifacts
+regression.diffs
+regression.out
+results/
+tmp_check/
+
+# Debug files
+*.dSYM/
+*.log
+core
+vgcore.*
+
+# Build directories
+build/
+dist/
+
+# CMake artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
