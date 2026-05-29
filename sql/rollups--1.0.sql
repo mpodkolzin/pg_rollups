@@ -74,7 +74,12 @@ CREATE TABLE rollups.continuous_aggregates (
     last_refresh TIMESTAMPTZ NOT NULL DEFAULT '-infinity'::timestamptz,
 
     -- Is this aggregate active?
-    is_active BOOLEAN NOT NULL DEFAULT true
+    is_active BOOLEAN NOT NULL DEFAULT true,
+
+    -- Aggregate select-list: the expressions computed per bucket.
+    -- Free-form SQL text (can exceed the 63-char NAME limit), e.g.
+    -- 'sum(amount) AS total, count(*) AS cnt'
+    select_clause TEXT NOT NULL
 );
 
 COMMENT ON TABLE rollups.continuous_aggregates IS
@@ -101,6 +106,7 @@ SELECT
     source_table_name AS source_table,
     time_column,
     bucket_interval,
+    select_clause,
     matview_name,
     CASE
         WHEN last_refresh = '-infinity'::timestamptz THEN 'Never refreshed'
@@ -115,42 +121,45 @@ COMMENT ON VIEW rollups.rollup_info IS
 'Human-readable view of all continuous aggregates';
 
 -- ============================================================================
--- PART 4: Test functions for CatalogManager
+-- PART 4: Continuous aggregate management functions
 -- ============================================================================
 
--- Test function: Create a continuous aggregate entry
--- This exercises CatalogManager::create() from SQL
-CREATE FUNCTION rollups.test_create_aggregate(
-    p_agg_name text,
-    p_source_table text,
-    p_time_column text,
-    p_bucket_interval interval DEFAULT '1 hour'::interval
+-- Create a continuous aggregate: records the metadata, then builds and
+-- populates the materialization table in one call.
+CREATE FUNCTION rollups.create_continuous_aggregate(
+    p_name          text,
+    p_source_table  text,
+    p_time_column   text,
+    p_bucket_width  interval,
+    p_select_clause text
 )
 RETURNS oid
-AS 'MODULE_PATHNAME', 'rollups_test_create_aggregate'
+AS 'MODULE_PATHNAME', 'rollups_create_continuous_aggregate'
 LANGUAGE C STRICT;
 
-COMMENT ON FUNCTION rollups.test_create_aggregate(text, text, text, interval) IS
-'Test function to create a continuous aggregate entry via CatalogManager::create()';
+COMMENT ON FUNCTION rollups.create_continuous_aggregate(text, text, text, interval, text) IS
+'Create a continuous aggregate and populate its materialization table.
+p_select_clause holds the per-bucket aggregate expressions, e.g.
+''sum(amount) AS total, count(*) AS cnt''.';
 
--- Test function: Load aggregate by name
--- Returns JSON representation of the aggregate
-CREATE FUNCTION rollups.test_load_aggregate(p_agg_name text)
-RETURNS jsonb
-AS 'MODULE_PATHNAME', 'rollups_test_load_aggregate'
+-- Refresh a continuous aggregate (Phase 3: full recompute).
+CREATE FUNCTION rollups.refresh_continuous_aggregate(p_name text)
+RETURNS void
+AS 'MODULE_PATHNAME', 'rollups_refresh_continuous_aggregate'
 LANGUAGE C STRICT;
 
-COMMENT ON FUNCTION rollups.test_load_aggregate(text) IS
-'Test function to load aggregate metadata via CatalogManager::load()';
+COMMENT ON FUNCTION rollups.refresh_continuous_aggregate(text) IS
+'Recompute the materialization table for a continuous aggregate.';
 
--- Test function: Check if aggregate exists
-CREATE FUNCTION rollups.test_aggregate_exists(p_agg_name text)
-RETURNS boolean
-AS 'MODULE_PATHNAME', 'rollups_test_aggregate_exists'
+-- Drop a continuous aggregate: removes the materialization table and the
+-- catalog entry.
+CREATE FUNCTION rollups.drop_continuous_aggregate(p_name text)
+RETURNS void
+AS 'MODULE_PATHNAME', 'rollups_drop_continuous_aggregate'
 LANGUAGE C STRICT;
 
-COMMENT ON FUNCTION rollups.test_aggregate_exists(text) IS
-'Test function to check aggregate existence via CatalogManager::exists()';
+COMMENT ON FUNCTION rollups.drop_continuous_aggregate(text) IS
+'Drop a continuous aggregate and its materialization table.';
 
 -- ============================================================================
 -- Grant appropriate permissions

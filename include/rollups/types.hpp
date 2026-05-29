@@ -110,55 +110,16 @@ typedef struct ContinuousAggregateData {
      */
     bool is_active;
 
+    /*
+     * Aggregate select-list: the expressions computed per bucket.
+     * Example: "sum(amount) AS total, count(*) AS cnt"
+     *
+     * This is a separately palloc'd char* (not NameData) because it is
+     * free-form SQL text and can exceed the 63-byte NameData limit.
+     * Corresponds to: rollups.continuous_aggregates.select_clause
+     */
+    char *select_clause;
+
 } ContinuousAggregateData;
-
-/*
- * CreateContinuousAggregateStmt - Result of parsing CREATE CONTINUOUS AGGREGATE
- *
- * This struct holds the parsed components of a CREATE CONTINUOUS AGGREGATE statement.
- * It's a short-lived structure (only exists during DDL command execution).
- *
- * Memory: All string fields are palloc'd and live in CurrentMemoryContext.
- * They're automatically freed when the memory context resets.
- *
- * Example DDL:
- *   CREATE CONTINUOUS AGGREGATE hourly_sales
- *   ON sales_transactions(created_at)
- *   WITH (bucket_width = '1 hour')
- *   AS SELECT ...
- */
-typedef struct CreateContinuousAggregateStmt {
-    /*
-     * Name of the continuous aggregate
-     * Example: "hourly_sales"
-     */
-    char *agg_name;
-
-    /*
-     * Source table name
-     * Example: "sales_transactions"
-     */
-    char *source_table;
-
-    /*
-     * Time column name in source table
-     * Example: "created_at"
-     */
-    char *time_column;
-
-    /*
-     * Bucket width interval (palloc'd)
-     * Example: '1 hour' interval
-     */
-    Interval *bucket_interval;
-
-    /*
-     * The aggregation query (SELECT ... GROUP BY ...)
-     * Not used in Phase 3, but will be needed for query rewriting in Phase 6
-     * Example: "SELECT time_bucket('1 hour', created_at) AS bucket, ..."
-     */
-    char *aggregation_query;
-
-} CreateContinuousAggregateStmt;
 
 #endif /* ROLLUPS_TYPES_HPP */

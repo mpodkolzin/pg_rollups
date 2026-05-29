@@ -85,6 +85,7 @@ public:
      *   source_table - Name of the source table
      *   time_column - Name of the time column
      *   bucket_interval - Bucket width (palloc'd)
+     *   select_clause - Per-bucket aggregate expressions (free-form SQL text)
      *
      * Returns: OID of the newly created aggregate (agg_id)
      *
@@ -94,7 +95,8 @@ public:
         const char *agg_name,
         const char *source_table,
         const char *time_column,
-        Interval *bucket_interval
+        Interval *bucket_interval,
+        const char *select_clause
     );
 
     /*

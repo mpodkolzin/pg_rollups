@@ -1,0 +1,54 @@
+#### Session 6: 2026-03-13 - PostgreSQL Hooks Study (In Progress)
+- **Status**: 🔄 Hook fundamentals learned, basic implementation added (partially complete)
+- **Completed**:
+  - ✅ **Studied pg_stat_statements hooks in depth**:
+    - Analyzed source code to understand hook pattern
+    - Identified 8 hooks it uses (planner, executor, ProcessUtility, shared memory)
+    - Understood hook chaining mechanism (middleware pattern)
+    - Learned how multiple extensions share the same hook
+  - ✅ **Created comprehensive hooks documentation** (`docs/HOOKS_GUIDE.md`):
+    - Complete hook pattern with examples (~800 lines)
+    - Available PostgreSQL hooks catalog
+    - Query execution pipeline diagram
+    - ProcessUtility_hook details for DDL interception
+    - Hook safety considerations (error handling, memory, recursion)
+    - Shared memory usage patterns
+    - What we need for rollups extension
+  - ✅ **Debugged pg_stat_statements hooks with VS Code**:
+    - Set breakpoints in `pgss_ProcessUtility`, `pgss_planner`, `pgss_ExecutorStart`
+    - Ran DDL (CREATE TABLE) → hit ProcessUtility_hook
+    - Ran SELECT query → hit planner_hook then ExecutorStart_hook
+    - Witnessed query execution pipeline in action
+  - ✅ **Implemented ProcessUtility_hook in rollups extension**:
+    - Added `_PG_init()` function for extension initialization
+    - Implemented `rollups_ProcessUtility()` hook function
+    - Added hook chaining support (saves/calls previous hook)
+    - Added DEBUG logging for DDL commands
+    - Ready to parse CREATE CONTINUOUS AGGREGATE syntax
+- **Key Learning Achievements**:
+  - **Hook Pattern**: Save previous → install new → call previous or standard
+  - **Hook Chaining**: Multiple extensions form a stack (last installed is first called)
+  - **ProcessUtility_hook**: Intercepts ALL DDL commands, perfect for custom syntax
+  - **Query Pipeline**: Saw parser → planner_hook → ExecutorStart_hook flow in debugger
+  - **Extension Initialization**: `_PG_init()` is called when extension loads
+- **In Progress**:
+  - Testing the ProcessUtility_hook implementation
+  - Next: Clone TimescaleDB and study their continuous aggregates
+- **Next Steps**:
+  - Test hook with DDL commands and verify DEBUG logging
+  - Debug hook in VS Code to inspect queryString
+  - Clone TimescaleDB source repository
+  - Study TimescaleDB ProcessUtility_hook usage
+  - Design C++ class hierarchy for rollup management
+  - Plan CREATE CONTINUOUS AGGREGATE parsing approach
+- **Questions to Answer (Deferred)**:
+  - How does TimescaleDB parse custom DDL syntax?
+  - What catalog schema do they use for metadata?
+  - How to integrate C++ classes with PostgreSQL memory contexts?
+  - When to use planner_hook vs ProcessUtility_hook?
+- **Decisions Made**:
+  - **ProcessUtility_hook is critical**: Use for CREATE CONTINUOUS AGGREGATE interception
+  - **Hook chaining implemented**: Our extension plays nice with others (like pg_stat_statements)
+  - **No shared memory needed (yet)**: Catalog tables sufficient for v1.0
+  - **Parse queryString manually**: Don't need to extend PostgreSQL grammar
+  - **Session will continue**: More work needed on TimescaleDB study and C++ design

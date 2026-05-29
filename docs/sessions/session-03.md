@@ -1,0 +1,63 @@
+#### Session 3: 2026-02-11 - Extension Basics with C++ and CMake
+- **Status**: Learning extension fundamentals + migrating to C++ with CMake build system
+- **Completed**:
+  - ✅ **Created complete extension scaffold** (Phase 1 → Phase 2 transition)
+    - `rollups.control`: Extension metadata and configuration
+    - `sql/rollups--1.0.sql`: SQL installation script with functions, tables, and views
+    - `src/rollups.cpp`: **C++ implementation** with extern "C" and extensive inline documentation
+    - `CMakeLists.txt`: **CMake build configuration** with PostgreSQL integration
+    - `Makefile`: Convenience wrapper around CMake for familiar workflow
+  - ✅ **Migrated to C++ and CMake**:
+    - Converted C to C++17 with proper extern "C" blocks
+    - Set up CMake with MODULE library type for PostgreSQL extensions
+    - Configured macOS bundle flags (-bundle, not -dynamiclib)
+    - Added compile_commands.json generation for IDE support
+    - Documented C++ limitations with PostgreSQL (no exceptions, use palloc not new)
+  - ✅ **Implemented core learning functions**:
+    - `rollups.version()`: Demonstrates basic C++ function structure with extern "C"
+    - `rollups.time_bucket()`: Core time-series functionality with static_cast examples
+  - ✅ **Designed metadata schema**:
+    - `rollups.continuous_aggregates`: Table to store rollup definitions
+    - `rollups.rollup_info`: User-friendly view for querying rollup status
+  - ✅ **Documented PostgreSQL API concepts** (C and C++):
+    - PG_MODULE_MAGIC and version 1 calling convention
+    - Datum type system and PG_GETARG_*/PG_RETURN_* macros
+    - Memory management with memory contexts (palloc/pfree, not new/delete)
+    - Error handling with ereport() (not C++ exceptions!)
+    - Function attributes: IMMUTABLE, STRICT, PARALLEL SAFE
+    - C++ integration: extern "C", name mangling, exception incompatibility
+  - ✅ **Created comprehensive build guides**:
+    - `docs/BUILDING.md`: CMake workflow, IDE integration, debugging with LLDB
+    - Step-by-step build instructions (configure, make, install, test)
+    - Troubleshooting for CMake and C++ specific issues
+    - Makefile targets reference (make, make install, make test, etc.)
+- **Key Learning Achievements**:
+  - **Extension Structure**: Understand .control, .sql, .cpp, CMakeLists.txt, and Makefile
+  - **CMake for Extensions**: MODULE library, PostgreSQL path extraction, macOS bundles
+  - **C++ Integration**: extern "C" blocks, no exceptions, memory management constraints
+  - **Function Calling Convention**: How to expose C++ functions to SQL via extern "C"
+  - **Timestamp Internals**: Timestamps are int64 microseconds since 2000-01-01
+  - **Time Bucketing Algorithm**: Integer division for efficient bucket mapping
+- **Next Steps**:
+  - Build the extension (`make && make install`)
+  - Test in PostgreSQL (`CREATE EXTENSION rollups; SELECT rollups.version();`)
+  - Study pg_stat_statements to learn about hooks and shared memory
+  - Create C++ helper classes for rollup logic (Phase 3)
+  - Implement CREATE CONTINUOUS AGGREGATE syntax (Phase 3)
+  - Add trigger-based incremental updates (Phase 4)
+- **Questions for Future Sessions**:
+  - How to parse custom DDL syntax (CREATE CONTINUOUS AGGREGATE)?
+  - Which hook to use: planner_hook or utility hook?
+  - How to efficiently track which buckets need refreshing?
+  - What C++ features are safe to use in different contexts?
+  - How to use STL containers with PostgreSQL's memory contexts?
+- **Decisions Made**:
+  - **C++ over C**: Use C++17 for better abstractions (classes, STL, modern features)
+  - **CMake over PGXS**: Use CMake for IDE integration and learning (understand build process)
+  - **Makefile wrapper**: Keep familiar workflow while using CMake underneath
+  - **Start with comprehensive documentation in code**: Heavy inline comments to make the code self-teaching
+  - **Build learning examples first**: Simple version() function before complex time_bucket()
+  - **Metadata-first approach**: Define storage schema before implementation logic
+  - **Simplified time bucketing v1.0**: No month support initially (variable-length complexity)
+  - **Focus on learning fundamentals**: Master basics before adding hooks and advanced features
+  - **Explain non-trivial C++ constructs**: User has some C++ experience but it's been a while - explain modern C++17 features (auto, lambdas, templates, STL, move semantics, etc.) as we use them

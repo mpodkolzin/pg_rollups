@@ -14,11 +14,7 @@ extern "C" {
 
 #include "rollups/continuous_aggregate.hpp"
 #include "rollups/catalog_manager.hpp"
-
-// Forward declaration (MaterializationEngine not implemented yet)
-namespace rollups {
-    class MaterializationEngine;
-}
+#include "rollups/materialization_engine.hpp"
 
 namespace rollups {
 
@@ -50,45 +46,36 @@ ContinuousAggregate::ContinuousAggregate(ContinuousAggregateData *data)
 }
 
 /*
- * refresh - Incremental refresh
+ * refresh - Recompute the materialization table
  *
- * TODO: Implement when MaterializationEngine is ready
- * For now, just a placeholder that reports an error
+ * Delegates to MaterializationEngine, which also advances the watermark.
  */
 void
 ContinuousAggregate::refresh()
 {
-    ereport(ERROR,
-            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-             errmsg("refresh() not yet implemented"),
-             errhint("MaterializationEngine is coming in Phase 3")));
+    MaterializationEngine::refresh(data_);
 }
 
 /*
- * initial_populate - First-time population
- *
- * TODO: Implement when MaterializationEngine is ready
+ * initial_populate - First-time population of the materialization table
  */
 void
 ContinuousAggregate::initial_populate()
 {
-    ereport(ERROR,
-            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-             errmsg("initial_populate() not yet implemented"),
-             errhint("MaterializationEngine is coming in Phase 3")));
+    MaterializationEngine::initial_populate(data_);
 }
 
 /*
- * drop - Delete aggregate
+ * drop - Delete the aggregate and its materialization table
  *
- * TODO: Implement - should drop matview and delete catalog entry
+ * Drop the data table first, then remove the catalog row. If the table drop
+ * fails, the catalog entry is left intact so the aggregate stays consistent.
  */
 void
 ContinuousAggregate::drop()
 {
-    ereport(ERROR,
-            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-             errmsg("drop() not yet implemented")));
+    MaterializationEngine::drop_matview(data_);
+    CatalogManager::delete_agg(data_->agg_id);
 }
 
 } // namespace rollups

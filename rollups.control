@@ -20,7 +20,7 @@ schema = rollups
 # when using absolute paths, but DOES when using $libdir variable!
 # - Absolute path: Must include .so → '/path/to/rollups.so'
 # - $libdir path: Don't include .so → '$libdir/rollups' (PostgreSQL adds it)
-module_pathname = '/Users/maxim.podkolzin/pgdev/postgres/lib/rollups.so'
+module_pathname = '/Users/maximpodkolzin/pgdev/postgres/lib/rollups.so'
 
 # requires: List of extensions this one depends on (comma-separated)
 # We don't need any other extensions yet, but this is how you'd specify them:

@@ -18,9 +18,10 @@ extern "C" {
 #include "postgres.h"
 #include "fmgr.h"
 #include "executor/spi.h"        // Server Programming Interface
-#include "utils/builtins.h"      // text_to_cstring, cstring_to_text
+#include "lib/stringinfo.h"      // StringInfoData for building queries
+#include "utils/builtins.h"      // text_to_cstring, quote_literal_cstr
 #include "utils/lsyscache.h"     // get_namespace_name
-#include "utils/timestamp.h"     // TimestampTz functions
+#include "utils/timestamp.h"     // TimestampTz, Interval, interval_out
 #include "catalog/namespace.h"   // RangeVarGetRelid
 #include "nodes/makefuncs.h"     // makeRangeVar
 #include "catalog/pg_type.h"     // Type OIDs (TEXTOID, INT4OID, etc.)
@@ -55,6 +56,16 @@ CatalogManager::load(const char *agg_name)
     int ret;
     char query[512];
 
+    /*
+     * Remember the caller's memory context BEFORE connecting to SPI.
+     *
+     * SPI_connect() switches CurrentMemoryContext to a private SPI context
+     * that SPI_finish() destroys. Anything we palloc while connected lives in
+     * that doomed context - so the result struct must be built in the caller's
+     * context instead, or it becomes a dangling pointer the moment we return.
+     */
+    MemoryContext caller_ctx = CurrentMemoryContext;
+
     /* Connect to SPI - required before any SPI operations */
     ret = SPI_connect();
     if (ret != SPI_OK_CONNECT)
@@ -63,24 +74,30 @@ CatalogManager::load(const char *agg_name)
                  errmsg("SPI_connect failed: %d", ret)));
 
     /*
-     * Build SELECT query
+     * Build SELECT query.
      *
-     * Note: We use quote_identifier to safely escape the aggregate name
-     * (protects against SQL injection if name came from untrusted source)
-     *
-     * For now, using sprintf is safe because agg_name is a NameData (max 63 chars)
-     * In production, you'd use SPI_prepare with parameters
+     * quote_literal_cstr() escapes the aggregate name into a safe SQL string
+     * literal (quotes included), so an embedded quote can't break the query
+     * or inject SQL.
      */
     snprintf(query, sizeof(query),
              "SELECT agg_id, agg_name, view_name, source_table_oid, "
              "       source_table_name, time_column, bucket_interval, "
-             "       matview_name, created_at, last_refresh, is_active "
+             "       matview_name, created_at, last_refresh, is_active, "
+             "       select_clause "
              "FROM rollups.continuous_aggregates "
-             "WHERE agg_name = '%s'",
-             agg_name);
+             "WHERE agg_name = %s",
+             quote_literal_cstr(agg_name));
 
-    /* Execute query */
-    ret = SPI_execute(query, true /* read-only */, 1 /* max rows */);
+    /*
+     * Execute query.
+     *
+     * read_only = false: this takes a fresh snapshot, so the SELECT sees rows
+     * inserted earlier in the SAME transaction (e.g. create() inserts the
+     * catalog row, then we immediately load it back). With read_only = true
+     * SPI would reuse the outer statement's snapshot and miss them.
+     */
+    ret = SPI_execute(query, false, 1 /* max rows */);
     if (ret != SPI_OK_SELECT)
     {
         SPI_finish();
@@ -99,10 +116,16 @@ CatalogManager::load(const char *agg_name)
                  errhint("Check rollups.rollup_info view for available aggregates.")));
     }
 
-    /* Convert tuple to our struct */
+    /*
+     * Convert tuple to our struct, building the result in the caller's
+     * context so it survives SPI_finish().
+     */
     HeapTuple tuple = SPI_tuptable->vals[0];
     TupleDesc tupdesc = SPI_tuptable->tupdesc;
+
+    MemoryContext spi_ctx = MemoryContextSwitchTo(caller_ctx);
     ContinuousAggregateData *data = tuple_to_data(tuple, tupdesc);
+    MemoryContextSwitchTo(spi_ctx);
 
     /* Disconnect SPI */
     SPI_finish();
@@ -121,6 +144,9 @@ CatalogManager::load_by_oid(Oid agg_oid)
     int ret;
     char query[512];
 
+    /* See load() for why we capture the caller's context here. */
+    MemoryContext caller_ctx = CurrentMemoryContext;
+
     ret = SPI_connect();
     if (ret != SPI_OK_CONNECT)
         ereport(ERROR,
@@ -130,12 +156,14 @@ CatalogManager::load_by_oid(Oid agg_oid)
     snprintf(query, sizeof(query),
              "SELECT agg_id, agg_name, view_name, source_table_oid, "
              "       source_table_name, time_column, bucket_interval, "
-             "       matview_name, created_at, last_refresh, is_active "
+             "       matview_name, created_at, last_refresh, is_active, "
+             "       select_clause "
              "FROM rollups.continuous_aggregates "
              "WHERE agg_id = %u",
              agg_oid);
 
-    ret = SPI_execute(query, true, 1);
+    /* read_only = false: see also the note in load(). */
+    ret = SPI_execute(query, false, 1);
     if (ret != SPI_OK_SELECT)
     {
         SPI_finish();
@@ -154,7 +182,10 @@ CatalogManager::load_by_oid(Oid agg_oid)
 
     HeapTuple tuple = SPI_tuptable->vals[0];
     TupleDesc tupdesc = SPI_tuptable->tupdesc;
+
+    MemoryContext spi_ctx = MemoryContextSwitchTo(caller_ctx);
     ContinuousAggregateData *data = tuple_to_data(tuple, tupdesc);
+    MemoryContextSwitchTo(spi_ctx);
 
     SPI_finish();
 
@@ -180,10 +211,11 @@ CatalogManager::exists(const char *agg_name)
                  errmsg("SPI_connect failed")));
 
     snprintf(query, sizeof(query),
-             "SELECT 1 FROM rollups.continuous_aggregates WHERE agg_name = '%s'",
-             agg_name);
+             "SELECT 1 FROM rollups.continuous_aggregates WHERE agg_name = %s",
+             quote_literal_cstr(agg_name));
 
-    ret = SPI_execute(query, true, 1);
+    /* read_only = false: see also the note in load(). */
+    ret = SPI_execute(query, false, 1);
     if (ret != SPI_OK_SELECT)
     {
         SPI_finish();
@@ -215,10 +247,10 @@ CatalogManager::create(
     const char *agg_name,
     const char *source_table,
     const char *time_column,
-    Interval *bucket_interval)
+    Interval *bucket_interval,
+    const char *select_clause)
 {
     int ret;
-    char query[1024];
     Oid source_table_oid;
     char *matview_name;
     Oid new_agg_id;
@@ -238,6 +270,14 @@ CatalogManager::create(
     /* Generate materialization table name */
     matview_name = generate_matview_name(agg_name);
 
+    /*
+     * Render the Interval* as canonical text via the type's output function.
+     * interval_out is the same routine PostgreSQL uses to display an interval,
+     * so the result re-parses cleanly back inside the INSERT.
+     */
+    char *interval_str = DatumGetCString(
+        DirectFunctionCall1(interval_out, IntervalPGetDatum(bucket_interval)));
+
     ret = SPI_connect();
     if (ret != SPI_OK_CONNECT)
         ereport(ERROR,
@@ -245,29 +285,33 @@ CatalogManager::create(
                  errmsg("SPI_connect failed")));
 
     /*
-     * Build INSERT query
-     *
-     * Note: We use RETURNING agg_id to get the auto-generated ID
-     *
-     * For bucket_interval, we convert it to text representation for the INSERT
-     * PostgreSQL will parse it back to interval type in the table
-     *
-     * TODO: Use SPI_prepare with parameters for better safety
+     * Build the INSERT with StringInfo: select_clause is free-form text and
+     * may be longer than any fixed buffer. quote_literal_cstr() escapes every
+     * user-supplied value into a safe SQL string literal, so embedded quotes
+     * cannot break the statement or inject SQL. RETURNING agg_id hands back
+     * the sequence-generated id.
      */
-    snprintf(query, sizeof(query),
+    StringInfoData buf;
+    initStringInfo(&buf);
+    appendStringInfo(&buf,
              "INSERT INTO rollups.continuous_aggregates "
              "(agg_name, view_name, source_table_oid, source_table_name, "
              " time_column, bucket_interval, matview_name, created_at, "
-             " last_refresh, is_active) "
-             "VALUES ('%s', '%s', %u, '%s', '%s', interval '%s', '%s', "
-             "        now(), '-infinity'::timestamptz, true) "
+             " last_refresh, is_active, select_clause) "
+             "VALUES (%s, %s, %u, %s, %s, interval %s, %s, "
+             "        now(), '-infinity'::timestamptz, true, %s) "
              "RETURNING agg_id",
-             agg_name, agg_name, source_table_oid, source_table,
-             time_column, "1 hour" /* TODO: convert Interval* to string */,
-             matview_name);
+             quote_literal_cstr(agg_name),
+             quote_literal_cstr(agg_name),
+             source_table_oid,
+             quote_literal_cstr(source_table),
+             quote_literal_cstr(time_column),
+             quote_literal_cstr(interval_str),
+             quote_literal_cstr(matview_name),
+             quote_literal_cstr(select_clause));
 
     /* Execute INSERT */
-    ret = SPI_execute(query, false /* not read-only */, 0);
+    ret = SPI_execute(buf.data, false /* not read-only */, 0);
     if (ret != SPI_OK_INSERT_RETURNING)
     {
         SPI_finish();
@@ -315,21 +359,24 @@ CatalogManager::update_last_refresh(Oid agg_oid, TimestampTz refresh_time)
     int ret;
     char query[256];
 
+    /*
+     * Render the timestamp via its output function so it re-parses exactly
+     * (no precision loss, correct timezone handling).
+     */
+    char *ts_str = DatumGetCString(
+        DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(refresh_time)));
+
     ret = SPI_connect();
     if (ret != SPI_OK_CONNECT)
         ereport(ERROR,
                 (errcode(ERRCODE_INTERNAL_ERROR),
                  errmsg("SPI_connect failed")));
 
-    /*
-     * TODO: Properly format TimestampTz as string
-     * For now, using 'now()' as placeholder
-     */
     snprintf(query, sizeof(query),
              "UPDATE rollups.continuous_aggregates "
-             "SET last_refresh = now() "
+             "SET last_refresh = %s::timestamptz "
              "WHERE agg_id = %u",
-             agg_oid);
+             quote_literal_cstr(ts_str), agg_oid);
 
     ret = SPI_execute(query, false, 0);
     if (ret != SPI_OK_UPDATE)
@@ -338,6 +385,40 @@ CatalogManager::update_last_refresh(Oid agg_oid, TimestampTz refresh_time)
         ereport(ERROR,
                 (errcode(ERRCODE_INTERNAL_ERROR),
                  errmsg("UPDATE rollups.continuous_aggregates failed")));
+    }
+
+    SPI_finish();
+}
+
+/*
+ * delete_agg - Remove an aggregate's catalog row
+ *
+ * Deletes only the metadata row. The caller is responsible for dropping the
+ * materialization table (see MaterializationEngine::drop_matview).
+ */
+void
+CatalogManager::delete_agg(Oid agg_oid)
+{
+    int ret;
+    char query[256];
+
+    ret = SPI_connect();
+    if (ret != SPI_OK_CONNECT)
+        ereport(ERROR,
+                (errcode(ERRCODE_INTERNAL_ERROR),
+                 errmsg("SPI_connect failed")));
+
+    snprintf(query, sizeof(query),
+             "DELETE FROM rollups.continuous_aggregates WHERE agg_id = %u",
+             agg_oid);
+
+    ret = SPI_execute(query, false, 0);
+    if (ret != SPI_OK_DELETE)
+    {
+        SPI_finish();
+        ereport(ERROR,
+                (errcode(ERRCODE_INTERNAL_ERROR),
+                 errmsg("DELETE from rollups.continuous_aggregates failed")));
     }
 
     SPI_finish();
@@ -425,6 +506,14 @@ CatalogManager::tuple_to_data(HeapTuple tuple, TupleDesc tupdesc)
     /* is_active (field 11) */
     Datum bool_datum = SPI_getbinval(tuple, tupdesc, 11, &isnull);
     data->is_active = isnull ? false : DatumGetBool(bool_datum);
+
+    /*
+     * select_clause (field 12) - free-form text, stored as a separate
+     * palloc'd string. pstrdup copies it into CurrentMemoryContext (the
+     * caller's context, set by load()/load_by_oid()).
+     */
+    char *select_clause = SPI_getvalue(tuple, tupdesc, 12);
+    data->select_clause = select_clause ? pstrdup(select_clause) : NULL;
 
     return data;
 }

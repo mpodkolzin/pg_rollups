@@ -1,0 +1,6 @@
+2026-05-15 21:04:01.784 PDT [6496] FATAL:  lock file "postmaster.pid" already exists
+2026-05-15 21:04:01.784 PDT [6496] HINT:  Is another postmaster (PID 5724) running in data directory "/Users/maximpodkolzin/pgdev/data"?
+2026-05-15 21:06:07.526 PDT [6833] FATAL:  lock file "postmaster.pid" already exists
+2026-05-15 21:06:07.526 PDT [6833] HINT:  Is another postmaster (PID 5724) running in data directory "/Users/maximpodkolzin/pgdev/data"?
+2026-05-15 21:07:28.630 PDT [7095] FATAL:  lock file "postmaster.pid" already exists
+2026-05-15 21:07:28.630 PDT [7095] HINT:  Is another postmaster (PID 5724) running in data directory "/Users/maximpodkolzin/pgdev/data"?

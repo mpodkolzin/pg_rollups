@@ -1,0 +1,46 @@
+#### Session 5: 2026-03-13 - Debugging Setup
+- **Status**: Complete debugging environment configured (Phase 2 tooling)
+- **Completed**:
+  - ✅ **Created comprehensive debugging documentation** (`docs/DEBUGGING.md`):
+    - Complete LLDB workflow for PostgreSQL extensions
+    - GDB vs LLDB command comparison for users familiar with GDB
+    - Troubleshooting guide for macOS-specific issues (SIP, code signing)
+    - Common debugging patterns and best practices
+  - ✅ **Hands-on LLDB debugging practice**:
+    - Attached LLDB to PostgreSQL backend process
+    - Set breakpoints in `rollups_version` and `rollups_time_bucket`
+    - Stepped through code and inspected variables
+    - Learned extension loading lifecycle (on-demand, per-backend)
+    - Discovered actual function names using `nm` (C++ name mangling)
+  - ✅ **Created PostgreSQL type formatters** (`scripts/lldb_postgres_formatters.py`):
+    - Python LLDB formatters for PostgreSQL internal types
+    - `text*` displays as readable strings instead of raw pointers
+    - `Timestamp` displays as formatted dates (e.g., "2024-01-15 14:00:00.000000 UTC")
+    - `Interval` displays as human-readable durations (e.g., "1 hour")
+    - Automatic loading via `.lldbinit` configuration
+  - ✅ **Integrated VS Code debugging**:
+    - CodeLLDB extension configured
+    - Can set breakpoints visually in IDE
+    - Navigate and inspect variables in debug panel
+- **Key Learning Achievements**:
+  - **Extension Loading Lifecycle**: Extensions load on-demand when first used, not at PostgreSQL startup
+  - **Backend Process Architecture**: Each psql connection creates a separate backend process to debug
+  - **C++ Name Mangling**: `extern "C"` prevents mangling; macOS adds `_` prefix to symbols
+  - **LLDB vs GDB**: LLDB is native macOS debugger; GDB has issues with modern macOS
+  - **PostgreSQL Type Formatters**: Custom formatters dramatically improve debugging experience
+- **Next Steps**:
+  - Study PostgreSQL hooks (pg_stat_statements as example)
+  - Research TimescaleDB continuous aggregates architecture
+  - Design C++ helper classes for rollup management
+  - Implement utility hook for CREATE CONTINUOUS AGGREGATE
+- **Questions for Future Sessions**:
+  - Which hooks are needed for intercepting CREATE CONTINUOUS AGGREGATE?
+  - How does pg_stat_statements use planner/executor hooks safely?
+  - How to use shared memory for extension state?
+  - Best practices for C++ classes with PostgreSQL memory contexts?
+- **Decisions Made**:
+  - **LLDB over GDB**: Use macOS native debugger for better integration
+  - **Python formatters**: Invest in tooling to make complex types readable
+  - **VS Code integration**: Visual debugging complements command-line LLDB
+  - **Defer hooks study**: Set up debugging first (needed to study hooks effectively)
+  - **Session 6 focus**: Study hooks with proper debugging tools in place

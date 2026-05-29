@@ -1,0 +1,53 @@
+#### Session 7: 2026-05-15 - C++ Class Design and Documentation
+- **Status**: ✅ Design phase complete, ready for implementation
+- **Completed**:
+  - ✅ **Tested ProcessUtility_hook successfully**:
+    - Verified hook fires on DDL commands (CREATE TABLE, DROP TABLE, CREATE INDEX)
+    - Confirmed query strings are logged correctly
+    - Tested hook chaining with multiple extensions
+    - Learned extension loading behavior (_PG_init only runs when first used)
+  - ✅ **Studied ServiceNow's custom PostgreSQL** (`/dev/snc/tembo/db`):
+    - Discovered ServiceNow uses C++ extensively (not pure C)
+    - Analyzed their hybrid approach: C structs for data, C++ classes for operations
+    - Studied `SncVarChar` class as example wrapper (palloc, no new/delete)
+    - Identified patterns: inline methods, namespaces, custom PG_GETARG/PG_RETURN macros
+    - Confirmed production viability of C++ for PostgreSQL extensions
+  - ✅ **Designed complete C++ class hierarchy** (Approach 1.5 - ServiceNow-style):
+    - `ContinuousAggregate` - Wrapper class for aggregate data
+    - `CatalogManager` - Stateless CRUD operations on metadata
+    - `MaterializationEngine` - Stateless populate/refresh operations
+    - `QueryParser` - Stateless DDL parsing
+    - `ContinuousAggregateData` - C struct for data storage (palloc'd)
+  - ✅ **Created comprehensive design documentation** (`docs/CLASS_DESIGN.md`):
+    - Complete architecture overview with diagrams
+    - Detailed class specifications with method signatures
+    - Memory management strategy
+    - Error handling approach
+    - Integration with existing code
+    - Testing strategy
+    - ~300 lines of detailed design documentation
+  - ✅ **Updated project documentation guidelines**:
+    - Added "Documentation As We Go" best practices
+    - Specified when to create design docs
+    - Added design decision #8 (C++ class design approach)
+- **Key Design Decisions**:
+  - **Hybrid C++/C approach**: Data in C structs (palloc'd), operations in C++ classes (stack-allocated)
+  - **ServiceNow-validated pattern**: Production-proven approach from `/dev/snc/tembo/db`
+  - **Stack-allocated wrappers**: `ContinuousAggregate` wraps `ContinuousAggregateData*`
+  - **Stateless managers**: `CatalogManager` and `MaterializationEngine` use only static methods
+  - **No RAII cleanup**: Destructors are no-ops, PostgreSQL memory contexts handle cleanup
+  - **Inline accessors**: Zero-cost abstraction for field access
+- **Next Steps** (Phase 3 implementation):
+  - Create `include/rollups/` directory structure
+  - Implement `types.hpp` (C struct definitions)
+  - Implement `CatalogManager` class (SPI-based CRUD)
+  - Implement `ContinuousAggregate` wrapper class
+  - Implement `QueryParser` (simple string parsing)
+  - Implement `MaterializationEngine` (initial_populate)
+  - Update CMakeLists.txt for new source files
+  - Write unit tests for each component
+- **Decisions Made**:
+  - **Document before coding**: Always create design docs for major features
+  - **ServiceNow as reference**: Use their code as examples for C++ patterns
+  - **Defer TimescaleDB study**: Implement our design first, compare later
+  - **Phase 3 focus**: Get basic CREATE CONTINUOUS AGGREGATE working end-to-end

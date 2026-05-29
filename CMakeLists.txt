@@ -117,6 +117,7 @@ set(ROLLUPS_SOURCES
     src/rollups.cpp
     src/catalog_manager.cpp
     src/continuous_aggregate.cpp
+    src/materialization_engine.cpp
 )
 
 # Create shared module (not shared library - important for PostgreSQL)

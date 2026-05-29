@@ -1,0 +1,27 @@
+#### Session 2: 2026-02-09 - Environment Setup Planning (macOS)
+- **Status**: Environment setup preparation for macOS
+- **Completed**:
+  - Created automated environment check script (`scripts/check_environment.sh`) with macOS support
+  - Created automated macOS setup script (`scripts/setup_macos.sh`) supporting both Apple Silicon and Intel
+  - Fully documented macOS-specific setup process in DEVELOPMENT.md
+  - Updated all documentation to be macOS-focused
+  - Evaluated containerized vs native development approach
+  - Added LLDB debugging instructions (macOS native debugger)
+  - Created VS Code configuration for macOS (with arm64/x64 variants)
+- **Next Steps**:
+  - Install Xcode Command Line Tools (if needed)
+  - Run environment check script
+  - Execute setup script to build PostgreSQL from source on macOS
+  - Verify extension building works with PGXS
+  - Study contrib extension examples
+- **Questions Raised**:
+  - Should we use containerized environment? → Decided on native for better debugging
+  - macOS-specific setup needed? → Yes, updated all documentation for macOS
+- **Decisions Made**:
+  - **Native installation over Docker**: Better debugging experience with LLDB, easier IDE integration, simpler to attach debugger and step through both PostgreSQL core and extension code
+  - **Build from source with debug symbols**: Using `--enable-debug --enable-cassert CFLAGS="-ggdb -O0 -g3"` optimized for LLDB
+  - **Separate dev installation**: Install to `~/pgdev/` to avoid conflicting with system PostgreSQL
+  - **PostgreSQL 16.6**: Use stable release for better documentation and fewer bugs
+  - **Homebrew for dependencies**: Standard package manager on macOS
+  - **Support both architectures**: Apple Silicon (/opt/homebrew) and Intel (/usr/local)
+  - **Use zsh**: Default shell on modern macOS (update .zshrc, not .bashrc)

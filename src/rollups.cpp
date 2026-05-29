@@ -40,8 +40,6 @@ extern "C" {
 #include "datatype/timestamp.h" /* More timestamp functions */
 #include "tcop/utility.h"      /* ProcessUtility_hook for DDL commands */
 #include "commands/explain.h"  /* QueryCompletion and related types */
-#include "lib/stringinfo.h"    /* StringInfoData for string building */
-#include "utils/jsonb.h"       /* JSONB type and functions */
 }
 
 // We can now use C++ headers safely
@@ -188,18 +186,18 @@ rollups_ProcessUtility(PlannedStmt *pstmt,
 				 errdetail("Query: %s", queryString)));
 
 		/*
-		 * TODO (Phase 3): Detect CREATE CONTINUOUS AGGREGATE here
+		 * Phase 3 uses a function-based API for managing aggregates
+		 * (rollups.create_continuous_aggregate(...) etc.), so creation does
+		 * NOT go through this hook.
 		 *
-		 * Pseudocode for future implementation:
+		 * Why not a custom CREATE CONTINUOUS AGGREGATE statement? This hook
+		 * runs AFTER the parser. PostgreSQL's grammar is fixed, so a brand-new
+		 * keyword sequence is a syntax error before the hook is ever reached -
+		 * adding real keywords would mean forking PostgreSQL's grammar.
 		 *
-		 * if (strncmp(queryString, "CREATE CONTINUOUS AGGREGATE", 27) == 0)
-		 * {
-		 *     // Our custom DDL command!
-		 *     ParseCreateContinuousAggregate(queryString);
-		 *     CreateRollupMetadata(...);
-		 *     CreateMaterializationTable(...);
-		 *     return;  // Don't call standard_ProcessUtility for our command
-		 * }
+		 * The hook is kept here for observability now, and as the future home
+		 * for intercepting CREATE MATERIALIZED VIEW ... WITH (rollups.*) and
+		 * DROP TABLE cascades.
 		 */
 	}
 
@@ -406,174 +404,76 @@ rollups_time_bucket(PG_FUNCTION_ARGS)
 } // extern "C"
 
 /* ========================================================================
- * PART 3: Test functions for CatalogManager (Phase 2)
+ * PART 3: Continuous aggregate management functions
  * ========================================================================
- */
-
-/*
- * rollups_test_create_aggregate - Test function for CatalogManager::create()
  *
- * Creates a continuous aggregate entry in the catalog table.
- * Returns the generated agg_id (OID).
+ * These are the user-facing entry points for the function-based API:
+ *   rollups.create_continuous_aggregate(...)
+ *   rollups.refresh_continuous_aggregate(name)
+ *   rollups.drop_continuous_aggregate(name)
  *
- * This exercises the full SPI workflow:
- * - Looking up source table OID
- * - Generating matview name
- * - Inserting into catalog table
- * - Returning the generated ID
- *
- * Parameters:
- *   p_agg_name: Name for the aggregate
- *   p_source_table: Source table name
- *   p_time_column: Time column name
- *   p_bucket_interval: Bucket width (optional, default '1 hour')
- *
- * Returns: OID of the created aggregate
- *
- * C++ NOTE: Demonstrates calling C++ static methods from C function.
+ * Each is a thin extern "C" wrapper: it converts the SQL arguments to C
+ * types and delegates to the C++ CatalogManager / ContinuousAggregate
+ * classes, which do the real SPI work.
  */
 extern "C" {
 
-PG_FUNCTION_INFO_V1(rollups_test_create_aggregate);
+PG_FUNCTION_INFO_V1(rollups_create_continuous_aggregate);
 
 Datum
-rollups_test_create_aggregate(PG_FUNCTION_ARGS)
+rollups_create_continuous_aggregate(PG_FUNCTION_ARGS)
 {
-	/*
-	 * Extract arguments
-	 * - text_to_cstring: Convert PostgreSQL text* to C string
-	 * - PG_GETARG_INTERVAL_P: Get interval* argument
-	 */
-	text *agg_name_text = PG_GETARG_TEXT_PP(0);
-	text *source_table_text = PG_GETARG_TEXT_PP(1);
-	text *time_column_text = PG_GETARG_TEXT_PP(2);
-	Interval *bucket_interval = PG_GETARG_INTERVAL_P(3);
-
-	/* Convert text to C strings */
-	char *agg_name = text_to_cstring(agg_name_text);
-	char *source_table = text_to_cstring(source_table_text);
-	char *time_column = text_to_cstring(time_column_text);
+	/* Convert the SQL arguments to C types. */
+	char *agg_name      = text_to_cstring(PG_GETARG_TEXT_PP(0));
+	char *source_table  = text_to_cstring(PG_GETARG_TEXT_PP(1));
+	char *time_column   = text_to_cstring(PG_GETARG_TEXT_PP(2));
+	Interval *bucket    = PG_GETARG_INTERVAL_P(3);
+	char *select_clause = text_to_cstring(PG_GETARG_TEXT_PP(4));
 
 	/*
-	 * Call C++ CatalogManager::create()
-	 *
-	 * This demonstrates mixing C and C++ in PostgreSQL extensions:
-	 * - The extern "C" function is callable from SQL
-	 * - It calls a C++ static method internally
-	 * - The C++ method does the complex SPI work
-	 * - If CatalogManager::create() calls ereport(ERROR), control
-	 *   never returns here (PostgreSQL longjmp to error handler)
+	 * Step 1: record the aggregate in the catalog. CatalogManager::create()
+	 * also resolves the source table OID and generates the matview name.
 	 */
-	Oid result = rollups::CatalogManager::create(
-		agg_name,
-		source_table,
-		time_column,
-		bucket_interval
-	);
+	Oid agg_id = rollups::CatalogManager::create(
+		agg_name, source_table, time_column, bucket, select_clause);
 
-	/* Return the OID */
-	PG_RETURN_OID(result);
+	/*
+	 * Step 2: build and populate the materialization table. We construct the
+	 * wrapper from the name so the engine works from the canonical catalog
+	 * row (resolved OIDs, generated matview name) rather than local copies.
+	 */
+	rollups::ContinuousAggregate agg(agg_name);
+	agg.initial_populate();
+
+	PG_RETURN_OID(agg_id);
 }
 
-/*
- * rollups_test_load_aggregate - Test function for CatalogManager::load()
- *
- * Loads aggregate metadata by name and returns it as JSON.
- *
- * This demonstrates:
- * - Loading data from catalog via C++ CatalogManager
- * - Converting C++ struct to JSON for SQL visibility
- * - Using PostgreSQL's JSON type
- *
- * Parameters:
- *   p_agg_name: Name of the aggregate to load
- *
- * Returns: JSONB representation of the aggregate
- *
- * C++ NOTE: We manually build the JSON here. In future versions,
- * we might use a C++ JSON library (like nlohmann/json) for cleaner code.
- */
-PG_FUNCTION_INFO_V1(rollups_test_load_aggregate);
+PG_FUNCTION_INFO_V1(rollups_refresh_continuous_aggregate);
 
 Datum
-rollups_test_load_aggregate(PG_FUNCTION_ARGS)
+rollups_refresh_continuous_aggregate(PG_FUNCTION_ARGS)
 {
-	/* Extract argument */
-	text *agg_name_text = PG_GETARG_TEXT_PP(0);
-	char *agg_name = text_to_cstring(agg_name_text);
+	char *agg_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
 
-	/*
-	 * Load aggregate from catalog
-	 *
-	 * CatalogManager::load() returns ContinuousAggregateData* or
-	 * throws ereport(ERROR) if not found.
-	 *
-	 * Note: ContinuousAggregateData is at global scope (not in rollups::)
-	 * because it's a C struct, not a C++ class.
-	 */
-	ContinuousAggregateData *data =
-		rollups::CatalogManager::load(agg_name);
+	/* The constructor loads the aggregate from the catalog. */
+	rollups::ContinuousAggregate agg(agg_name);
+	agg.refresh();
 
-	/*
-	 * Build JSON representation
-	 *
-	 * For simplicity, we'll build a JSON string manually.
-	 * PostgreSQL will parse it into jsonb type.
-	 *
-	 * Note: NameStr() macro converts NameData to char*
-	 * Format: {"agg_id": 12345, "agg_name": "...", ...}
-	 */
-	StringInfoData buf;
-	initStringInfo(&buf);
-
-	appendStringInfo(&buf, "{");
-	appendStringInfo(&buf, "\"agg_id\": %u,", data->agg_id);
-	appendStringInfo(&buf, "\"agg_name\": \"%s\",", NameStr(data->agg_name));
-	appendStringInfo(&buf, "\"view_name\": \"%s\",", NameStr(data->view_name));
-	appendStringInfo(&buf, "\"source_table_oid\": %u,", data->source_table_oid);
-	appendStringInfo(&buf, "\"source_table_name\": \"%s\",", NameStr(data->source_table_name));
-	appendStringInfo(&buf, "\"time_column\": \"%s\",", NameStr(data->time_column));
-	appendStringInfo(&buf, "\"matview_name\": \"%s\",", NameStr(data->matview_name));
-	appendStringInfo(&buf, "\"is_active\": %s", data->is_active ? "true" : "false");
-	appendStringInfo(&buf, "}");
-
-	/*
-	 * Convert string to jsonb
-	 *
-	 * DirectFunctionCall1: Call a PostgreSQL function directly
-	 * jsonb_in: PostgreSQL's JSON parser
-	 * cstring_to_text: Convert C string to text* for jsonb_in
-	 */
-	Datum json_datum = DirectFunctionCall1(jsonb_in,
-		CStringGetDatum(buf.data));
-
-	PG_RETURN_DATUM(json_datum);
+	PG_RETURN_VOID();
 }
 
-/*
- * rollups_test_aggregate_exists - Test function for CatalogManager::exists()
- *
- * Simple existence check - returns boolean.
- *
- * Parameters:
- *   p_agg_name: Name to check
- *
- * Returns: true if exists, false if not
- */
-PG_FUNCTION_INFO_V1(rollups_test_aggregate_exists);
+PG_FUNCTION_INFO_V1(rollups_drop_continuous_aggregate);
 
 Datum
-rollups_test_aggregate_exists(PG_FUNCTION_ARGS)
+rollups_drop_continuous_aggregate(PG_FUNCTION_ARGS)
 {
-	/* Extract argument */
-	text *agg_name_text = PG_GETARG_TEXT_PP(0);
-	char *agg_name = text_to_cstring(agg_name_text);
+	char *agg_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
 
-	/* Call C++ CatalogManager::exists() */
-	bool result = rollups::CatalogManager::exists(agg_name);
+	/* The constructor loads the aggregate from the catalog. */
+	rollups::ContinuousAggregate agg(agg_name);
+	agg.drop();
 
-	/* Return boolean */
-	PG_RETURN_BOOL(result);
+	PG_RETURN_VOID();
 }
 
 } // extern "C"

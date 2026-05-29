@@ -1,0 +1,37 @@
+#### Session 4: 2026-02-12 - Extension Build, Install, and Testing
+- **Status**: Successfully built and tested working extension (Phase 2 in progress)
+- **Completed**:
+  - ✅ **Verified PostgreSQL development environment**:
+    - Confirmed pg_config at `~/pgdev/postgres/bin/pg_config`
+    - Verified CMake build configuration (PostgreSQL 16.6 with debug symbols)
+  - ✅ **Built extension using CMake**:
+    - Existing build artifacts from Session 3 verified (`build/rollups.so`)
+    - CMake configured for macOS with C++17 and debug flags
+  - ✅ **Installed and tested extension**:
+    - Created verification script `scripts/verify_and_test.sh`
+    - Automated PostgreSQL startup check and database creation
+    - Successfully installed extension to PostgreSQL
+    - Loaded extension in `rollups_test` database
+    - Verified `rollups.version()` returns "Rollups Extension 1.0"
+    - Verified `rollups.time_bucket()` correctly buckets timestamps
+    - Confirmed metadata schema created (`rollups.continuous_aggregates`, `rollups.rollup_info`)
+- **Key Learning Achievements**:
+  - **Extension Loading**: Understand the full lifecycle from .so to CREATE EXTENSION
+  - **Testing Workflow**: Automated testing with shell scripts for rapid iteration
+  - **CMake Integration**: Successfully used CMake with PostgreSQL's installation paths
+  - **Function Verification**: Both basic (version) and complex (time_bucket) functions work
+- **Next Steps**:
+  - Study PostgreSQL hooks (pg_stat_statements example)
+  - Research TimescaleDB continuous aggregates architecture
+  - Design C++ helper classes for rollup management
+  - Implement utility hook for CREATE CONTINUOUS AGGREGATE syntax
+  - Add trigger-based incremental update mechanism
+- **Questions for Future Sessions**:
+  - How do utility hooks work for custom DDL?
+  - What's the best way to organize C++ classes with PostgreSQL memory contexts?
+  - How to implement query rewriting to use materialized rollup data?
+  - Should we use triggers or background workers for initial implementation?
+- **Decisions Made**:
+  - **Automated testing script**: Created `verify_and_test.sh` for quick validation
+  - **Test-driven workflow**: Build → Install → Test cycle is now streamlined
+  - **Ready for Phase 3**: Foundation is solid, ready to implement core rollup logic
