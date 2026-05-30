@@ -710,6 +710,7 @@ Detailed session notes live in `docs/sessions/`:
 - [Session 8: 2026-05-15 - C++ Class Implementation (Phase 3 Begin)](docs/sessions/session-08.md)
 - [Session 9: 2026-05-15 - CatalogManager Testing and Verification](docs/sessions/session-09.md)
 - [Session 10: 2026-05-20 - Function API and MaterializationEngine (Phase 3)](docs/sessions/session-10.md)
+- [Session 11: 2026-05-29 - Query Rewriting Stage 1 (planner_hook)](docs/sessions/session-11.md)
 
 ---
 
@@ -947,13 +948,12 @@ auto result = std::find_if(vec.begin(), vec.end(),
 
 ---
 
-**Last Updated**: 2026-05-20 (Session 10 - Complete)
-**Current Phase**: Phase 3 - Core Rollup Engine (function API + MaterializationEngine working; query rewriting next)
-**Status**: ✅ End-to-end create / refresh / drop of continuous aggregates verified
+**Last Updated**: 2026-05-29 (Session 11 - Paused)
+**Current Phase**: Phase 3 - Core Rollup Engine (query rewriting Stage 1: planner_hook)
+**Status**: 🚧 Header defined, implementation file next - see docs/sessions/session-11.md for checklist
 **Platform**: macOS (Apple Silicon & Intel)
 **Language**: C++17 with extern "C" for PostgreSQL interface
 **Build System**: CMake 3.20+ with Makefile wrapper
 **Debugger**: LLDB (macOS native) with PostgreSQL type formatters + VS Code integration
-**Key Files**: rollups.control, sql/rollups--1.0.sql, src/rollups.cpp, src/catalog_manager.cpp, src/continuous_aggregate.cpp, src/materialization_engine.cpp (NEW), include/rollups/*.hpp, CMakeLists.txt, Makefile, docs/BUILDING.md, docs/DEBUGGING.md, docs/HOOKS_GUIDE.md, docs/CLASS_DESIGN.md, scripts/lldb_postgres_formatters.py, .lldbinit
-**Next Session**: Query rewriting (use materialized data automatically); then Phase 4 incremental refresh
-**Next Session**: Implement QueryParser and MaterializationEngine
+**Key Files**: rollups.control, sql/rollups--1.0.sql, src/rollups.cpp, src/catalog_manager.cpp, src/continuous_aggregate.cpp, src/materialization_engine.cpp, include/rollups/*.hpp (including query_rewriter.hpp NEW), CMakeLists.txt, Makefile, docs/BUILDING.md, docs/DEBUGGING.md, docs/HOOKS_GUIDE.md, docs/CLASS_DESIGN.md, docs/QUERY_REWRITING.md (NEW), scripts/lldb_postgres_formatters.py, .lldbinit
+**Next Session**: Implement src/query_rewriter.cpp (pattern matching, query tree surgery, hook registration) - start in Code Mode
